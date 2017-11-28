@@ -1,0 +1,86 @@
+import numpy
+import pandas
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.wrappers.scikit_learn import KerasRegressor
+from keras.optimizers import SGD, Adam
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import mean_squared_error
+from geopy.distance import great_circle
+from keras import backend as K
+from math import ceil
+#from sklearn.preprocessing import StandardScaler
+#from sklearn.pipeline import Pipeline
+
+#dataframe = pandas.read_csv("test_kfold.csv", delim_whitespace=False, header=None)
+dataframe = pandas.read_csv("medicoes.csv", delim_whitespace=False, header=None)
+trainingmatrix = dataframe.values
+numpy.random.shuffle(trainingmatrix)
+dataframe = pandas.read_csv("testLoc.csv", delim_whitespace=False, header=None)
+testmatrix = dataframe.values
+
+batchsize = 16
+nepochs = 1500
+dim = 6
+min_lat = -8.065
+max_lat = -8.080
+min_long = -34.887
+max_long = -34.91
+
+def normalization(vet, max, min):
+	return 100*(vet-min)/(max-min)
+
+def distance_measure(y_true, y_pred):
+	return K.sqrt(K.sum(K.square(y_true - y_pred)))
+
+def deep_network():
+	nnet = Sequential()
+	nnet.add(Dense(dim, input_dim=dim, kernel_initializer='normal', activation='relu'))
+	nnet.add(Dense(ceil(dim/2), kernel_initializer='normal', activation='relu'))
+	nnet.add(Dense(2, kernel_initializer='normal'))
+	adam = Adam(lr=0.00015)
+	nnet.compile(loss='mean_absolute_error', optimizer=adam)
+	return nnet
+	
+def create_analysis_array(lats, longs, reference):
+	size = longs.size
+	pred = numpy.zeros((size, 3))
+	for i in range(0,size-1):
+		pred[i,0] = lats[i]
+		pred[i,1] = longs[i]
+		pred[i,2] = vincenty((pred[i,0], pred[i,1]), (reference[i,0], reference[i,1])).meters
+	return pred
+
+X_training = trainingmatrix[:,2:8]
+Y_training = trainingmatrix[:,0:2]
+X_test = testmatrix[:,2:8]
+Y_test = testmatrix[:,0:2]
+
+# Y_training[:,0] = normalization(Y_training[:,0], max_lat, min_lat)
+# Y_training[:,1] = normalization(Y_training[:,1], max_long, min_long)
+
+# Y_test[:,0] = normalization(Y_test[:,0], max_lat, min_lat)
+# Y_test[:,1] = normalization(Y_test[:,1], max_long, min_long)
+
+print(Y_test)
+
+# evaluator = KerasRegressor(build_fn=shallow_network, epochs=nepochs, batch_size=batchsize, verbose=0)
+# kfold = KFold(n_splits=10, random_state=seed)
+# results = cross_val_score(evaluator, RSSIs, Pos, cv=kfold)
+# print("Results -> MSER: %.6f // SD: %.6f \n" % (results.mean(), results.std()))
+
+# evaluator = KerasRegressor(build_fn=deep_network, epochs=nepochs, batch_size=batchsize, verbose=0)
+evaluator = deep_network()
+evaluator.fit(X_training, Y_training, epochs=nepochs, batch_size=batchsize)
+predictions = evaluator.predict(X_test)
+score = mean_squared_error(Y_test, predictions, multioutput='uniform_average')
+
+# print("Results -> MSER: %.6f // AVGDIST: %.6f \n " % (score, avgdist))
+print("Results -> MSER: %.6f \n " % (score))
+print(predictions)
+
+# kfold = KFold(n_splits=10, random_state=seed)
+# results = cross_val_score(evaluator, RSSIs, Pos, cv=kfold)
+# print("Results -> MSER: %.6f // SD: %.6f \n" % (results.mean(), results.std()))
