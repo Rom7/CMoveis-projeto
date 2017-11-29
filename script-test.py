@@ -5,6 +5,7 @@
 # uma linea sendo as coordenadas (latitudas, longituda) de um novo ponto calculado pela soluçao
 
 import csv
+import sys
 
 
 def add_entry(lat,lon):
@@ -14,10 +15,13 @@ def add_entry(lat,lon):
 	c.writerows(datalist + [[lat,lon]])
 
 
-print("latituda ?")
-lat = input()
-print("longituda ?")
-lon = input()
+#print("latituda ?")
+#lat = input()
+#print("longituda ?")
+#lon = input()
+
+lat = sys.argv[1]
+lon = sys.argv[2]
 
 add_entry(lat,lon)
 
