@@ -1,17 +1,22 @@
-<DOCTYPE <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 	<title>Projeto Graphic Results</title>
 	<script src="http://d3js.org/d3.v4.js"></script>
-	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css"
-   integrity="sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=="
-crossorigin=""/>
-   <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"
-   integrity="sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=="
-   crossorigin=""></script>
-	<script type="text/javascript" src="datavis-format.js"></script>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css" crossorigin=""/>
+   <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js" crossorigin=""></script>
+	
 </head>
-<body onload="start()">
+<h1>Projeto : Graphic Results</h1>
+<form id="user_form">
+	<input type="radio" name="menu" value="all_points" checked="false" onclick="start(this.value);"> Visualizacao global
+    <input type="radio" name="menu" value="smart" checked="false" onclick="start(this.value);"> Visualizacao passo-a-passo 
+	
+</form>
+<body>
+<br>
+<br>
 	<div id="map" style="height : 450px; width : 650px" ></div>
+	<script type="text/javascript" src="datavis-format.js"></script>
 </body>
 </html>
