@@ -1,5 +1,3 @@
-##### 2/12/2017 : A versão atual no GitHub é uma implementação de outra abordagem com Linear Regression + Artificial Neural Network. A versão final apresentada está descrita abaixo.
-
 # Comunicaçoes Móveis : Projeto
 
 Geo-tracker project based on machine learning and radio propagation model. A mobile RSSI measure is used to estimate the user's position.
@@ -9,6 +7,7 @@ Geo-tracker project based on machine learning and radio propagation model. A mob
    - *testLoc.csv* : test data (input : RSSI from each RBS)
    - *fichier-test.csv* : computed data (output : WGS84 position)
 #### 2. Aproach / Abordagem (Python / Numpy / Pandas / Sklearn / Keras) :
+    */solucao/kNN-BIO.py*
    - 1: Model fitting (remove duplications, similar entries...)
    - 2: Train a weighted k-nearest neighbors (w-KNN) algorithm with the fitted model
    - 3: w-KNN computes a 6-dimensional vector for each points (input) : each dimension represents a distance to an RBS
