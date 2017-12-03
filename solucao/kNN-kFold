@@ -1,0 +1,97 @@
+import numpy
+import pandas
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.wrappers.scikit_learn import KerasRegressor
+from keras.optimizers import SGD, Adam
+from keras.callbacks import EarlyStopping
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import mean_squared_error
+from geopy.distance import vincenty
+from keras import backend as K
+from math import ceil, sqrt
+
+dataframe = pandas.read_csv("test_kfold.csv", delim_whitespace=False, header=None)
+datamatrix = dataframe.values
+dataframe = pandas.read_csv("erbs.csv", delim_whitespace=False, header=None)
+erbs = dataframe.values
+
+X = datamatrix[:,2:8]
+Y = datamatrix[:,0:2] 
+
+batchsize = 16
+nepochs = 200
+dim = 6
+
+k = 9
+
+def get_neighbors(indices, pos_set):
+	neighbors = numpy.zeros((indices.shape[1], 2))
+	for i in range(0, neighbors.shape[0]):
+		neighbors[i,:] = pos_set[indices[0,i],:]
+	return neighbors
+
+def kNN_estimator(k, indices, dist_neighbors, pos_set):
+	s = numpy.sum(dist_neighbors[0,:])
+	est = numpy.zeros(2)
+	neighbors = get_neighbors(indices, pos_set)
+	for i in range(0, neighbors.shape[0]):
+		est = est + dist_neighbors[0,i]*neighbors[i,:]
+	return est / s
+
+def distance_to_erbs(points, erbs):
+	tup = erbs.shape
+	limitj = tup[0]
+	tup2 = points.shape
+	limiti = tup2[0]
+	d = numpy.zeros((tup2[0], tup[0]))
+	for i in range(0,limiti):
+		for j in range(0,limitj):
+			d[i, j] = vincenty((points[i,0], points[i,1]), (erbs[j,0], erbs[j,1])).meters
+	return d
+	
+def distance_to_reference(training_result, reference):
+	tup = reference.shape
+	d = numpy.zeros(tup[0])
+	for i in range(0, tup[0]):
+		d[i] = vincenty((training_result[i,0], training_result[i,1]), (reference[i,0], reference[i,1])).meters
+	return d
+
+def distance_measure(y_true, y_pred):
+	return K.sqrt(K.sum(K.square(y_true - y_pred)))
+	
+def deep_network():
+	nnet = Sequential()
+	nnet.add(Dense(dim, input_dim=dim, kernel_initializer='normal', activation='relu'))
+	nnet.add(Dense(ceil(dim/2), kernel_initializer='normal', activation='relu'))
+	nnet.add(Dense(2, kernel_initializer='normal'))
+	adam = Adam(lr=0.001)
+	nnet.compile(loss=distance_measure, optimizer=adam)
+	return nnet
+
+kf = KFold(n_splits=10, shuffle=True)
+for train_index, test_index in kf.split(X, Y):
+	X_train, X_test = X[train_index], X[test_index]
+	Y_train, Y_test = Y[train_index], Y[test_index]
+	Yd_train = distance_to_erbs(Y_train, erbs)
+	Yd_test = distance_to_erbs(Y_test, erbs)
+
+	tup = X_test.shape
+	results = numpy.zeros(Y_test.shape)
+	nbrs = NearestNeighbors(n_neighbors=k, algorithm='kd_tree', leaf_size=60).fit(X_train)
+	for i in range(0, tup[0]):
+		distances, indices = nbrs.kneighbors(X_test[i,:].reshape(1,6))
+		results[i,:] = kNN_estimator(k, indices, distances, Y_train)
+	
+# evaluator = out_network()
+# evaluator.fit(Yd_training, Y_training, epochs=nepochs, batch_size=batchsize)
+# results = evaluator.predict(Yd_test)
+
+# score = mean_squared_error(Yd_test[:,0], predictions, multioutput='uniform_average')
+
+	# print(results)
+	d = distance_to_reference(results, Y_test)
+	print(sqrt((d**2).mean()), d.std(), d.max(), d.min())
+	print(d)

@@ -1,0 +1,153 @@
+import numpy
+import pandas
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import mean_squared_error
+from geopy.distance import vincenty
+from math import ceil, sqrt
+import SwarmPackagePy
+
+dataframe = pandas.read_csv("test_kfold.csv", delim_whitespace=False, header=None)
+datamatrix = dataframe.values
+dataframe = pandas.read_csv("erbs.csv", delim_whitespace=False, header=None)
+erbs = dataframe.values
+
+X = datamatrix[:,2:8]
+Y = datamatrix[:,0:2] 
+
+dim = 6
+splits = 10
+big_alfa = 3
+small_alfa = 0.5
+k = 9
+
+min_lat = -8.065
+max_lat = -8.080
+min_long = -34.887
+max_long = -34.91
+
+def regENN(k, test_set, alfa):
+	m = test_set.shape[0]
+	contador = 0
+	for i in range(0,m):
+		mask = numpy.ones(test_set.shape[0], dtype=bool)
+		mask[i-contador] = False
+		temp = test_set[mask,...]
+		nbrs = NearestNeighbors(n_neighbors=k, algorithm='kd_tree', leaf_size=60).fit(temp[:,2:8])
+		distances, indices = nbrs.kneighbors(test_set[i-contador,2:8].reshape(1,6))
+		y, neighbors = kNN_estimator2(indices, distances, temp[:,0:2])
+		stds = numpy.std(neighbors, axis=0)
+		y = abs(test_set[i-contador,0:2] - y)
+		if y[0] > alfa*stds[0] or y[1] > alfa*stds[1]:
+			test_set = temp
+			contador = contador + 1
+	return test_set
+
+def regCNN(k, test_set, alfa):
+	m = test_set.shape[0]
+	P = test_set[0:k,:]
+	for i in range(k,m):
+		temp = test_set[i,:]
+		nbrs = NearestNeighbors(n_neighbors=k, algorithm='kd_tree', leaf_size=60).fit(P[:,2:8])
+		distances, indices = nbrs.kneighbors(temp[2:8].reshape(1,6))
+		y, neighbors = kNN_estimator2(indices, distances, P[:,0:2])
+		stds = numpy.std(neighbors, axis=0)
+		y = abs(temp[0:2] - y)
+		if y[0] > alfa*stds[0] or y[1] > alfa*stds[1]:
+			P = numpy.append(P, temp.reshape(1,8), axis=0)
+	return P
+
+def get_neighbors(indices, pos_set):
+	neighbors = numpy.zeros((indices.shape[1], 2))
+	for i in range(0, neighbors.shape[0]):
+		neighbors[i,:] = pos_set[indices[0,i],:]
+	return neighbors
+
+def kNN_estimator(indices, dist_neighbors, pos_set, erbs):
+	s = numpy.sum(dist_neighbors[0,:])
+	est = numpy.zeros(dim)
+	neighbors = get_neighbors(indices, pos_set)
+	d = distance_to_erbs(neighbors, erbs)
+	for i in range(0, dim):
+		for j in range(0, neighbors.shape[0]):
+			est[i] = est[i] + dist_neighbors[0,j]*d[j,i]
+		est[i] /= s
+	return est
+
+def kNN_estimator2(indices, dist_neighbors, pos_set):
+	s = numpy.sum(dist_neighbors[0,:])
+	est = numpy.zeros(2)
+	neighbors = get_neighbors(indices, pos_set)
+	for i in range(0, neighbors.shape[0]):
+		est = est + dist_neighbors[0,i]*neighbors[i,:]
+	return est/s, neighbors
+
+def distance_to_erbs(points, erbs):
+	tup = erbs.shape
+	limitj = tup[0]
+	tup2 = points.shape
+	limiti = tup2[0]
+	d = numpy.zeros((tup2[0], tup[0]))
+	for i in range(0,limiti):
+		for j in range(0,limitj):
+			d[i, j] = vincenty((points[i,0], points[i,1]), (erbs[j,0], erbs[j,1])).meters
+	return d
+	
+def distance_to_reference(training_result, reference):
+	tup = reference.shape
+	d = numpy.zeros(tup[0])
+	for i in range(0, tup[0]):
+		d[i] = vincenty((training_result[i,0], training_result[i,1]), (reference[i,0], reference[i,1])).meters
+	return d
+
+def fitness(point):
+	new_dists = distance_to_erbs(point.reshape(1,2), erbs)
+	vector = numpy.zeros(6)
+	for i in range(0,dim):
+		vector[i] = inter_step[i] - new_dists[0,i]
+	return numpy.dot(vector,vector)
+
+	
+
+kf = KFold(n_splits=splits, shuffle=True)
+# k_measures = numpy.zeros((dim,4))
+k_measures = numpy.zeros(4)
+for train_index, test_index in kf.split(X, Y):
+	X_train, X_test = X[train_index], X[test_index]
+	Y_train, Y_test = Y[train_index], Y[test_index]
+	Yd_train = distance_to_erbs(Y_train, erbs)
+	Yd_test = distance_to_erbs(Y_test, erbs)
+
+	union = numpy.zeros((X_train.shape[0], X_train.shape[1] + Y_train.shape[1]))
+	union[:,0:2] = Y_train
+	union[:,2:8] = X_train
+	union = regENN(k, union, big_alfa)
+	union = regCNN(k, union, small_alfa)
+	Y_train = union[:,0:2]
+	X_train = union[:,2:8]
+
+	tup = X_test.shape
+	inter_step = numpy.zeros(X_test.shape[1])
+	results = numpy.zeros(Y_test.shape)
+	nbrs = NearestNeighbors(n_neighbors=k, algorithm='kd_tree', leaf_size=60).fit(X_train)
+	for i in range(0, tup[0]):
+		distances, indices = nbrs.kneighbors(X_test[i,:].reshape(1,6))
+		inter_step = kNN_estimator(indices, distances, Y_train, erbs)
+		results[i,:] = SwarmPackagePy.pso(100, fitness, [min_lat, min_long], [max_lat, max_long], 2, 50, 0.1, 1, 1).get_Gbest()
+
+	# err = abs(distance_to_erbs(Y_test, erbs) - results)
+	err = numpy.zeros(results.shape[0])
+	for i in range(0, err.size):
+		err[i] = vincenty((Y_test[i,0], Y_test[i,1]), (results[i,0], results[i,1])).meters
+	
+	k_measures = k_measures + [sqrt((err**2).mean()), err.std(), err.max(), err.min()]
+	# for i in range(0,dim):
+	# 	now = err[i,:]
+	# 	k_measures[i,:] = k_measures[i,:] + [sqrt((now**2).mean()), now.std(), now.max(), now.min()]
+
+k_measures /= splits
+print(k_measures)
+# d = distance_to_reference(results, Y_test)
+# print(sqrt((d**2).mean()), d.std(), d.max(), d.min())
+# print(d)
